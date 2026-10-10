@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hiring Signal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#0f1218; --card:#171c26; --line:#262d3b; --text:#e7ebf3; --mute:#8a94a8;
+          --accent:#5b8cff; --green:#34c78a; --red:#ef6b6b; --amber:#f0b44c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:1080px; margin:0 auto; padding:28px 20px 60px; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  .sub { color:var(--mute); margin:0 0 22px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:18px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .field { flex:1 1 200px; display:flex; flex-direction:column; gap:5px; }
+  .field.wide { flex:2 1 320px; }
+  label { font-size:12px; color:var(--mute); text-transform:uppercase; letter-spacing:.04em; }
+  input { background:#0f131b; border:1px solid var(--line); color:var(--text); border-radius:8px;
+          padding:10px 12px; font:inherit; }
+  input:focus { outline:2px solid var(--accent); border-color:transparent; }
+  .actions { display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; align-items:center; }
+  button { font:inherit; border-radius:8px; padding:10px 16px; cursor:pointer; border:1px solid var(--line);
+           background:#0f131b; color:var(--text); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  button:disabled { opacity:.55; cursor:wait; }
+  .notice { border-radius:8px; padding:10px 12px; margin-bottom:14px; font-size:14px; }
+  .notice.warn { background:#2a2312; border:1px solid #5a4a1c; color:#f0d9a0; }
+  .notice.err { background:#2a1515; border:1px solid #6b2a2a; color:#f3b4b4; }
+  .notice.demo { background:#1a2236; border:1px solid #33497d; color:#b8cdfa; }
+  .notice.info { background:#14231c; border:1px solid #28523d; color:#a9e2c5; }
+  .stats { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+  .stat { flex:1 1 150px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .stat b { display:block; font-size:28px; }
+  .stat span { color:var(--mute); font-size:13px; }
+  .g { color:var(--green); } .r { color:var(--red); }
+  h2 { font-size:16px; margin:0 0 12px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; color:var(--mute); font-weight:500; font-size:12px; text-transform:uppercase;
+       letter-spacing:.04em; padding:8px 10px; border-bottom:1px solid var(--line); }
+  td { padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr:last-child td { border-bottom:none; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; background:#202838; color:var(--mute); }
+  .scroll { overflow-x:auto; }
+  .empty { color:var(--mute); padding:8px 2px; }
+  a { color:var(--accent); }
+  select { background:#0f131b; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:9px 10px; font:inherit; }
+  .hidden { display:none; }
+  .chartbox { position:relative; height:240px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Hiring Signal</h1>
+  <p class="sub">Track which companies are ramping up hiring for a role or skill, and see what changed since the last check.</p>
+
+  {% if not has_serpapi %}
+  <div class="notice warn">No SerpApi key found. Paste it into <code>config.py</code> (<code>SERPAPI_KEY_HERE</code>) or <code>.env</code>, then restart the app. You can still preview the app with simulated demo data.</div>
+  {% endif %}
+  <div class="notice info">Extraction mode: <b>{{ "Claude" if mode == "claude" else "rules-based (no AI key needed)" }}</b>. Only a SerpApi key is required.</div>
+
+  <div class="card">
+    <div class="row">
+      <div class="field wide"><label for="query">Role or skill</label>
+        <input id="query" placeholder='e.g. LLM infra engineer' autocomplete="off"></div>
+      <div class="field"><label for="location">Location</label>
+        <input id="location" placeholder="e.g. India" value="India"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field wide"><label for="companies">Company watchlist (optional, comma-separated)</label>
+        <input id="companies" placeholder="e.g. Google, Razorpay, Zerodha"></div>
+      <div class="field"><label for="maxr">Max postings</label>
+        <input id="maxr" type="number" min="5" max="50" value="30"></div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="trackBtn">Track now</button>
+      <button id="demoBtn" title="Loads fictional data so you can preview the diff and trend views">Load simulated demo data</button>
+      <span style="flex:1"></span>
+      <label for="history" style="margin:0">Past tracks</label>
+      <select id="history"><option value="">-</option></select>
+    </div>
+  </div>
+
+  <div id="msg"></div>
+
+  <div id="report" class="hidden">
+    <div id="demoBanner" class="notice demo hidden"><b>Simulated demo data.</b> These postings are fictional and are not real market data.</div>
+    <div class="stats" id="stats"></div>
+
+    <div class="card">
+      <h2>Posting volume over time</h2>
+      <div class="chartbox"><canvas id="chart"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2 id="diffTitle">What changed</h2>
+      <div id="diffBody"></div>
+    </div>
+
+    <div class="card">
+      <h2>Current postings</h2>
+      <div class="scroll" id="latest"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let chart;
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function notice(kind, text) { $("msg").innerHTML = text ? `<div class="notice ${kind}">${esc(text)}</div>` : ""; }
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? iso : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+function link(url, label) {
+  return /^https?:\/\//.test(url || "") ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)}</a>` : esc(label);
+}
+function table(rows, cols) {
+  if (!rows.length) return `<div class="empty">None.</div>`;
+  const head = cols.map((c) => `<th>${esc(c.h)}</th>`).join("");
+  const body = rows.map((r) => "<tr>" + cols.map((c) => `<td>${c.f(r)}</td>`).join("") + "</tr>").join("");
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+const FULL = [
+  { h: "Company", f: (r) => esc(r.company) },
+  { h: "Title", f: (r) => link(r.source_url, r.title) },
+  { h: "Level", f: (r) => `<span class="tag">${esc(r.seniority)}</span>` },
+  { h: "Location", f: (r) => esc(r.location) + (r.remote ? ' <span class="tag">remote</span>' : "") },
+  { h: "Signal note", f: (r) => esc(r.signal_note) },
+];
+const SHORT = [
+  { h: "Company", f: (r) => esc(r.company) },
+  { h: "Title", f: (r) => esc(r.title) },
+  { h: "Location", f: (r) => esc(r.location) },
+];
+
+function render(rep) {
+  $("report").classList.toggle("hidden", !rep.runs.length);
+  if (!rep.runs.length) return;
+  $("demoBanner").classList.toggle("hidden", !rep.demo);
+
+  const last = rep.steps[rep.steps.length - 1];
+  const total = rep.runs[rep.runs.length - 1].count;
+  $("stats").innerHTML = `
+    <div class="stat"><b>${total}</b><span>postings in latest run</span></div>
+    <div class="stat"><b class="g">${last ? "+" + last.new.length : "-"}</b><span>new since previous run</span></div>
+    <div class="stat"><b class="r">${last ? "-" + last.disappeared.length : "-"}</b><span>disappeared</span></div>
+    <div class="stat"><b>${rep.runs.length}</b><span>runs recorded</span></div>`;
+
+  // trend chart
+  const labels = rep.runs.map((r) => new Date(r.run_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+  const data = rep.runs.map((r) => r.count);
+  if (chart) chart.destroy();
+  chart = new Chart($("chart"), {
+    type: "line",
+    data: { labels, datasets: [{ label: "Postings", data, borderColor: "#5b8cff", backgroundColor: "rgba(91,140,255,.15)", fill: true, tension: .25, pointRadius: 4 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0, color: "#8a94a8" }, grid: { color: "#262d3b" } },
+                x: { ticks: { color: "#8a94a8" }, grid: { display: false } } } },
+  });
+
+  // diff
+  if (!last) {
+    $("diffTitle").textContent = "What changed";
+    $("diffBody").innerHTML = `<div class="notice info" style="margin:0">Baseline saved. Click <b>Track now</b> again later and this section will show new and disappeared postings.</div>`;
+  } else {
+    $("diffTitle").textContent = "What changed in the latest run (" + fmtDate(last.run_at) + ")";
+    $("diffBody").innerHTML =
+      `<h2 class="g" style="font-size:14px">New postings (${last.new.length})</h2>` + `<div class="scroll">${table(last.new, FULL)}</div>` +
+      `<h2 class="r" style="font-size:14px;margin-top:18px">Disappeared: filled or pulled (${last.disappeared.length})</h2>` + `<div class="scroll">${table(last.disappeared, SHORT)}</div>` +
+      `<p class="empty" style="margin-bottom:0">${last.unchanged} postings unchanged.</p>`;
+  }
+
+  $("latest").innerHTML = table(rep.latest, FULL);
+}
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Request failed (" + res.status + ")");
+  return data;
+}
+
+async function loadHistory(selected) {
+  const qs = await api("/api/queries");
+  $("history").innerHTML = '<option value="">-</option>' + qs.map((q) => `<option value="${esc(q)}">${esc(q)}</option>`).join("");
+  if (selected) $("history").value = selected;
+}
+
+async function track() {
+  notice("", "");
+  const btn = $("trackBtn");
+  btn.disabled = true; btn.textContent = "Fetching from SerpApi...";
+  try {
+    const rep = await api("/api/track", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: $("query").value, location: $("location").value,
+                             companies: $("companies").value, max_results: $("maxr").value }),
+    });
+    render(rep); await loadHistory(rep.query);
+    if (rep.ai_failed) notice("warn", "The Claude step failed, so this run used rules-based extraction instead.");
+  } catch (e) { notice("err", e.message); }
+  btn.disabled = false; btn.textContent = "Track now";
+}
+
+async function demo() {
+  notice("", "");
+  const btn = $("demoBtn"); btn.disabled = true;
+  try { const rep = await api("/api/demo", { method: "POST" }); render(rep); await loadHistory(rep.query); }
+  catch (e) { notice("err", e.message); }
+  btn.disabled = false;
+}
+
+$("trackBtn").onclick = track;
+$("demoBtn").onclick = demo;
+$("query").addEventListener("keydown", (e) => { if (e.key === "Enter") track(); });
+$("history").onchange = async (e) => {
+  if (!e.target.value) return;
+  try { render(await api("/api/report?query=" + encodeURIComponent(e.target.value))); notice("", ""); }
+  catch (err) { notice("err", err.message); }
+};
+loadHistory();
+</script>
+</body>
+</html>

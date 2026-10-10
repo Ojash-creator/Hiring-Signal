@@ -1,0 +1,13 @@
+# secrets - never commit
+.env
+config_local.py
+
+# local data / build output
+hiring_signal.db
+trend.png
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
