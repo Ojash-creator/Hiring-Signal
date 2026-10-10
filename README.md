@@ -87,11 +87,3 @@ python -m unittest discover -s tests -v
   census.
 - A "disappeared" posting may be filled, pulled, or just not returned that time.
 - Keys live in `.env` (gitignored). Never commit real keys.
-
-## Demo video
-
-<!-- Add your link here before submitting: https://... -->
-
-## License
-
-MIT
